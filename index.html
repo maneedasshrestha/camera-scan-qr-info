@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Real-Time QR Code Scanner</title>
+  <style>
+    /* Basic Reset */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f4f4f9;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      color: #4CAF50;
+      font-size: 2rem;
+      margin-bottom: 20px;
+    }
+
+    /* Camera Container */
+    #camera-container {
+      position: relative;
+      width: 100%;
+      max-width: 500px;
+      aspect-ratio: 16 / 9; /* Ensure the video has a proper aspect ratio */
+      overflow: hidden;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+      margin-bottom: 20px;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 12px;
+    }
+
+    /* Overlay Styling */
+    #overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 60%;
+      height: 60%;
+      border: 3px dashed #FF5722; /* Color for the guide border */
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      border-radius: 10px;
+    }
+
+    /* Button Styles */
+    button {
+      background-color: #4CAF50;
+      color: white;
+      font-size: 16px;
+      padding: 12px 25px;
+      margin: 10px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    button:hover {
+      background-color: #45a049;
+    }
+
+    /* Result Display */
+    #result {
+      margin-top: 20px;
+      font-size: 18px;
+      color: #333;
+    }
+
+    #qrResult {
+      color: #FF5722;
+      font-weight: bold;
+    }
+
+    /* Responsiveness */
+    @media (max-width: 600px) {
+      h1 {
+        font-size: 1.5rem;
+      }
+
+      #camera-container {
+        max-width: 100%;
+        aspect-ratio: 1 / 1; /* Keep it square on small screens */
+      }
+
+      button {
+        width: 100%;
+        padding: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>Real-Time QR Code Scanner</h1>
+  <div id="camera-container">
+    <video id="video" autoplay></video>
+    <div id="overlay"></div>
+  </div>
+  <canvas id="canvas" style="display: none;"></canvas>
+  <button id="openCameraButton">Open Camera</button>
+  <button id="stopButton" style="display: none;">Stop Camera</button>
+  <div id="result">Result: <span id="qrResult">None</span></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsqr/dist/jsQR.js"></script>
+  <script>
+    const videoElement = document.getElementById('video');
+    const canvasElement = document.getElementById('canvas');
+    const qrResultElement = document.getElementById('qrResult');
+    const openCameraButton = document.getElementById('openCameraButton');
+    const stopButton = document.getElementById('stopButton');
+    let stream;
+    let scanning = false;
+
+    // Open the camera and start scanning
+    openCameraButton.addEventListener('click', async () => {
+      try {
+        // Request video stream from the back camera (facingMode: 'environment')
+        stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: 'environment' } 
+        });
+        videoElement.srcObject = stream;
+        scanning = true;
+
+        // Show relevant buttons
+        openCameraButton.style.display = 'none';
+        stopButton.style.display = 'inline-block';
+
+        // Wait for the video to load its metadata before starting scanning
+        videoElement.onloadedmetadata = () => {
+          // Start the scanning loop with setInterval
+          startScanning();
+        };
+      } catch (error) {
+        console.error("Error accessing the camera:", error);
+        alert("Unable to access the camera. Please check your browser permissions.");
+      }
+    });
+
+    // Stop the camera and scanning
+    stopButton.addEventListener('click', () => {
+      stopScanning();
+    });
+
+    // Start scanning for QR codes at regular intervals
+    function startScanning() {
+      const scanInterval = setInterval(() => {
+        if (scanning) {
+          const canvasContext = canvasElement.getContext('2d');
+
+          // Wait for video dimensions to be available
+          if (videoElement.videoWidth === 0 || videoElement.videoHeight === 0) {
+            return; // Skip if video dimensions are not ready
+          }
+
+          canvasElement.width = videoElement.videoWidth;
+          canvasElement.height = videoElement.videoHeight;
+
+          // Draw the current frame from the video onto the canvas
+          canvasContext.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+
+          // Extract image data from the canvas
+          const imageData = canvasContext.getImageData(0, 0, canvasElement.width, canvasElement.height);
+
+          // Use jsQR to decode the QR code
+          const qrCode = jsQR(imageData.data, imageData.width, imageData.height);
+
+          if (qrCode) {
+            qrResultElement.textContent = qrCode.data;
+            alert(`QR Code Detected: ${qrCode.data}`);
+            clearInterval(scanInterval); // Stop the interval once a QR code is found
+            stopCamera();
+          }
+        }
+      }, 500); // Scan every 500ms
+    }
+
+    // Stop the scanning process and hide buttons
+    function stopScanning() {
+      scanning = false;
+      stopCamera();
+    }
+
+    // Stop the camera
+    function stopCamera() {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        videoElement.srcObject = null;
+      }
+      stopButton.style.display = 'none';
+      openCameraButton.style.display = 'inline-block';
+      qrResultElement.textContent = 'None';
+    }
+  </script>
+</body>
+</html>
